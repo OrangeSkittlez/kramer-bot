@@ -16,7 +16,7 @@ use serenity::{
 
 #[group]
 #[only_in(guilds)]
-#[commands(join, leave, play, now_playing, skip, seek)]
+#[commands(join, leave, play, now_playing, skip, seek, next)]
 struct Music;
 
 #[command]
@@ -249,6 +249,34 @@ async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
        
     }
    Ok(()) 
+}
+#[command]
+#[aliases(queue)]
+async fn next(ctx: &Context, msg: &Message) -> CommandResult {
+    let data = ctx.data.read().await;
+    let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
+    if let Some(node) = lava_client.nodes().await.get(&msg.guild_id.unwrap().0) {
+        for track in &node.queue {
+            check_msg(
+                msg.channel_id
+                .say(
+                    &ctx.http,
+                    format!("`{}`", track.track.info.clone().unwrap().title)
+
+                ).await
+            );
+        }
+        return Ok(())
+    } else {
+        check_msg(
+            msg.channel_id
+            .say(
+                &ctx.http,
+                "you are insufferable"
+            ).await
+        );
+    }
+    Ok(())
 }
 
 fn check_msg(result: SerenityResult<Message>) {
