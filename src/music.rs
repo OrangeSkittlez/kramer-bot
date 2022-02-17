@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{time::Duration, ptr::read};
 use serenity::{
     prelude::*,
     Result as SerenityResult,
@@ -16,7 +16,7 @@ use serenity::{
 
 #[group]
 #[only_in(guilds)]
-#[commands(join, leave, play, now_playing, skip, seek, next)]
+#[commands(join, leave, play, now_playing, skip, seek, qu)]
 struct Music;
 
 #[command]
@@ -86,6 +86,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 
     Ok(())
 }
+//TODO dont join everytime a song is played. if in channel just play the song.
 #[command]
 #[min_args(1)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
@@ -189,34 +190,23 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 
     if let Some(node) = lava_client.nodes().await.get(&msg.guild_id.unwrap().0) {
         if let Some(track) = &node.now_playing {
-            check_msg(
+            dbg!(check_msg(
                 msg.channel_id
                     .say(
-                        &ctx.http,
-                        format!("now playing: `{}`", track.track.info.as_ref().unwrap().title)
-                    )
-                    .await
-            );
-
-            //TODO make this actually work (make it display time in H:M:S)
+                        &ctx,
+                        format!("now playing: `{}`\n**{}** / **{}**", 
+                            track.track.info.as_ref().unwrap().title,
+                            ms_to_hms(track.track.info.as_ref().unwrap().position),
+                            ms_to_hms(track.track.info.as_ref().unwrap().length
+                            )
+                    )).await));
+        } else { 
             check_msg(
-                msg.channel_id
-                .say(
-                    &ctx.http,
-                    format!("{}/{}", 
-                        ms_to_hms(track.track.info.as_ref().unwrap().position),
-                        ms_to_hms(track.track.info.as_ref().unwrap().length)
-                    )).await
-            );
-
-        } else {
-            check_msg(
-                msg.channel_id.say(&ctx.http, "Kill yourself NOW!").await
-            );
+                msg.channel_id.say(&ctx.http, "Kill yourself NOW!").await,);
         }
     } else {
         check_msg(
-            msg.channel_id.say(&ctx.http, "Kill yourself NOW!").await
+            msg.channel_id.say(&ctx.http, "Kill yourself NOW!").await,
         );
     }
     Ok(())
@@ -252,7 +242,7 @@ async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 #[command]
 #[aliases(queue)]
-async fn next(ctx: &Context, msg: &Message) -> CommandResult {
+async fn qu(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;
     let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
     if let Some(node) = lava_client.nodes().await.get(&msg.guild_id.unwrap().0) {
@@ -261,7 +251,7 @@ async fn next(ctx: &Context, msg: &Message) -> CommandResult {
                 msg.channel_id
                 .say(
                     &ctx.http,
-                    format!("`{}`", track.track.info.clone().unwrap().title)
+                    format!("`{}`", track.track.info.as_ref().unwrap().title)
 
                 ).await
             );
@@ -286,14 +276,31 @@ fn check_msg(result: SerenityResult<Message>) {
 }
 
 fn ms_to_hms(ms: u64) -> String {
-    let sec = ms / 1000;
-    let hours = sec/3600;
-    let minutes = sec - (hours * 3600) / 60;
-    let seconds = sec - (hours * 3600) - (minutes * 60);
+    let duration = Duration::new(ms/1000, 0);
+    let seconds = duration.as_secs() % 60;
+    let minutes = (duration.as_secs() / 60) % 60;
+    let hours = (duration.as_secs() / 60) / 60;
+    let (mut hours_str, mut minutes_str, mut seconds_str) = (hours.to_string(), minutes.to_string(),seconds.to_string());
 
-    let (mut hours_str,mut  minutes_str,mut seconds_str) = (hours.to_string(), minutes.to_string(), seconds.to_string());
-    if hours < 10 {hours_str = format!("0{}",hours);}
-    if minutes < 10 {minutes_str = format!("0{}",minutes);}
-    if seconds < 10 {seconds_str = format!("0{}", seconds);}
-    format!("{hours_str}:{minutes_str}:{seconds_str}")
+    if seconds < 10 {seconds_str=format!("0{}", seconds)}
+    if minutes < 10 {minutes_str=format!("0{}", minutes)}
+    if hours < 10 {hours_str=format!("0{}", hours)}
+    format!("{}:{}:{}", hours_str, minutes_str, seconds_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::music::ms_to_hms;
+
+    #[test]
+    fn returns_correct_string() {
+        let ms = 4000000;
+        assert_eq!(ms_to_hms(ms), format!("01:06:40"));
+    }
+
+    #[test]
+    fn another_time() {
+        let ms = 9034421343;
+        assert_eq!(ms_to_hms(ms), format!("2509:33:41"));
+    }
 }
