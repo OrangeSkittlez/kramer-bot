@@ -1,5 +1,6 @@
 mod handlers;
 mod music;
+mod general;
 #[macro_use]
 extern crate tracing;
 use std::env;
@@ -13,6 +14,7 @@ use serenity::{
 use songbird::SerenityInit;
 
 use crate::music::MUSIC_GROUP;
+use crate::general::GENERAL_GROUP;
 
 
 #[hook]
@@ -42,7 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let framework = StandardFramework::new()
         .configure(|c| c.prefix(env::var("PREFIX").unwrap()))
         .after(after)
-        .group(&MUSIC_GROUP);
+        .group(&MUSIC_GROUP)
+        .group(&GENERAL_GROUP);
     
     let mut client = Client::builder(&token)
         .event_handler(handlers::Handler)

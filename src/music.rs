@@ -1,6 +1,5 @@
-use std::{time::Duration, ptr::read};
+use std::time::Duration;
 use serenity::{
-    prelude::*,
     Result as SerenityResult,
     model::{channel::Message, gateway::Ready, id::GuildId},
     client::{Client, Context, EventHandler},
@@ -288,19 +287,3 @@ fn ms_to_hms(ms: u64) -> String {
     format!("{}:{}:{}", hours_str, minutes_str, seconds_str)
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::music::ms_to_hms;
-
-    #[test]
-    fn returns_correct_string() {
-        let ms = 4000000;
-        assert_eq!(ms_to_hms(ms), format!("01:06:40"));
-    }
-
-    #[test]
-    fn another_time() {
-        let ms = 9034421343;
-        assert_eq!(ms_to_hms(ms), format!("2509:33:41"));
-    }
-}
