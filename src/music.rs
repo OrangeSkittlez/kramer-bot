@@ -56,6 +56,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[aliases(fuckoff)]
 async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let guild_id = guild.id;
@@ -189,7 +190,7 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 
     if let Some(node) = lava_client.nodes().await.get(&msg.guild_id.unwrap().0) {
         if let Some(track) = &node.now_playing {
-            dbg!(check_msg(
+            check_msg(
                 msg.channel_id
                     .say(
                         &ctx,
@@ -198,7 +199,7 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
                             ms_to_hms(track.track.info.as_ref().unwrap().position),
                             ms_to_hms(track.track.info.as_ref().unwrap().length
                             )
-                    )).await));
+                    )).await);
         } else { 
             check_msg(
                 msg.channel_id.say(&ctx.http, "Kill yourself NOW!").await,);
@@ -210,11 +211,10 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
     }
     Ok(())
 }
-
 #[command]
 #[min_args(1)]
 async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let duration = Duration::new(args.message().parse::<u64>().unwrap(), 0);
+    let duration = hms_to_duration(args.message().to_string()).unwrap();
     let data = ctx.data.read().await;
     let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
 
@@ -279,11 +279,35 @@ fn ms_to_hms(ms: u64) -> String {
     let seconds = duration.as_secs() % 60;
     let minutes = (duration.as_secs() / 60) % 60;
     let hours = (duration.as_secs() / 60) / 60;
-    let (mut hours_str, mut minutes_str, mut seconds_str) = (hours.to_string(), minutes.to_string(),seconds.to_string());
-
+    let (mut hours_str, mut minutes_str, mut seconds_str) = (hours.to_string(), minutes.to_string(),seconds.to_string()); 
     if seconds < 10 {seconds_str=format!("0{}", seconds)}
     if minutes < 10 {minutes_str=format!("0{}", minutes)}
     if hours < 10 {hours_str=format!("0{}", hours)}
     format!("{}:{}:{}", hours_str, minutes_str, seconds_str)
 }
 
+fn hms_to_duration(hms: String) -> Result<Duration, ()> {
+    let v: Vec<u64> = hms
+        .split(':')
+        .map(|x| x.parse::<u64>().unwrap())
+        .collect();
+
+    match v.len() {
+        // seconds
+        1 => {
+            Ok(Duration::new(v[0], 0))
+        }
+        // minutes and seconds
+        2 => {
+            let seconds = (v[0] * 60) + (v[1]);
+            Ok(Duration::new(seconds, 0))
+        }
+        // hours minutes and seconds
+        3 => {
+            let seconds = (v[0] * 3600) + (v[1] * 60) + v[0];
+            Ok(Duration::new(seconds, 0))
+        }
+        _ => Err(())
+        
+    }
+}
