@@ -86,87 +86,101 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 
     Ok(())
 }
-//TODO dont join everytime a song is played. if in channel just play the song.
+// TODO make sure bot verifies the user in the bots channel
 #[command]
 #[min_args(1)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let query = args.message().to_string();
-    let guild = msg.guild(&ctx.cache).await.unwrap();
-    let guild_id = guild.id;
-
-    let channel_id = guild
-        .voice_states
-        .get(&msg.author.id)
-        .and_then(|voice| voice.channel_id);
-
-    let connect_to = match channel_id {
-        Some(channel) => channel,
+    let lava_client = {
+        let data = ctx.data.read().await;
+        data.get::<crate::handlers::Lavalink>().unwrap().clone()
+    }; 
+    let guild_id = match ctx.cache.guild_channel(msg.channel_id).await {
+        Some(channel) => channel.guild_id,
         None => {
-            check_msg(msg.reply(&ctx.http, "join a channel first").await);
+            check_msg(
+                msg.channel_id
+                .say(&ctx.http, "error finding channel info")
+                .await,
+            );
             return Ok(());
         }
     };
-    let mut lava_client = {
-        let data = ctx.data.read().await;
-        data.get::<crate::handlers::Lavalink>().unwrap().clone()
-    };
     let manager = songbird::get(ctx).await.unwrap().clone();
-    let (_, handler) = manager.join_gateway(guild_id, connect_to).await;
-    match handler {
-        Ok(c_info) => {
-            let data = ctx.data.read().await;
-            lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
-            lava_client.create_session_with_songbird(&c_info).await?;
-            info!("Joined to play in {}", msg.channel_id);
-        }
+    if let None = manager.get(guild_id) {
+        let guild = msg.guild(&ctx.cache).await.unwrap();
+        let guild_id = guild.id;
 
-        Err(e) => check_msg(
-            msg.channel_id
-            .say(&ctx.http, format!("cant join channel: {}", e))
-            .await,
-            )
-    }
-    if let Some(_handler) = manager.get(guild_id) {
-            let query_info = lava_client.auto_search_tracks(&query).await?;
-            if query_info.tracks.is_empty() {
-                check_msg(
-                    msg.channel_id
-                    .say(&ctx.http, "could not find any video of the search query")
-                    .await,
-                );
+            let channel_id = guild
+            .voice_states
+            .get(&msg.author.id)
+            .and_then(|voice| voice.channel_id);
+
+        let connect_to = match channel_id {
+            Some(channel) => channel,
+            None => {
+                check_msg(msg.reply(&ctx.http, "join a channel first").await);
                 return Ok(());
             }
-            if let Err(e) = &lava_client
-                .play(guild_id, query_info.tracks[0].clone())
-                .queue()
-                .await {
-                    error!("{}", e);
-                    return Ok(());
-            };
+        };
+
+        let manager = songbird::get(ctx).await.unwrap().clone();
+        let (_, handler) = manager.join_gateway(guild_id, connect_to).await;
+        match handler {
+            Ok(c_info) => {
+                let data = ctx.data.read().await;
+                let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
+                lava_client.create_session_with_songbird(&c_info).await?;
+                info!("Joined {}", msg.channel_id);
+            }
+
+            Err(e) => check_msg(
+                msg.channel_id
+                .say(&ctx.http, format!("cant join channel: {}", e))
+                .await,
+                )
+        }
+    }
+    if let Some(_handler) = manager.get(guild_id) {
+        let query_info = lava_client.auto_search_tracks(&query).await?;
+        if query_info.tracks.is_empty() {
             check_msg(
                 msg.channel_id
-                .say(
-                    &ctx.http,
-                    format!(
-                        "queued: `{}`",
-                        query_info.tracks[0].info.as_ref().unwrap().title
-                    ),
-                ).await
+                .say(&ctx, "could not find any video of the search query")
+                .await,
             );
-
-            
-    };
-
-
+            return Ok(())
+        }
+        if let Err(e) = &lava_client
+            .play(guild_id, query_info.tracks[0].clone())
+            .queue()
+            .await {
+            error!("{}", e);
+            return Ok(());
+        };
+        check_msg(
+            msg.channel_id
+            .say(
+                &ctx.http,
+                format!("added: `{}`",query_info.tracks[0].info.as_ref().unwrap().title),
+            ).await
+        );
+    } else {
+        check_msg(
+            msg.channel_id
+            .say(
+                &ctx.http,
+                "Cant play for some reason!"
+            ).await
+        );
+    }
     Ok(())
 }
 
-//TODO make this stop when last song is skipped
 #[command]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;
     let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
-
     if let Some(track) = lava_client.skip(msg.guild_id.unwrap()).await {
         check_msg(
             msg.channel_id
@@ -175,6 +189,12 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
                 format!("skipped: `{}`", track.track.info.as_ref().unwrap().title)
             ).await,
         );
+        
+        if let Some(node) = lava_client.nodes().await.get(&msg.guild_id.unwrap().0) {
+            if node.queue.len() == 0 {
+                lava_client.stop(msg.guild(&ctx.cache).await.unwrap().id).await.unwrap(); 
+            }
+        }
     } else {
         check_msg(msg.channel_id.say(&ctx.http, "nothing to skip").await);
     }
@@ -214,7 +234,7 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[min_args(1)]
 async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let duration = hms_to_duration(args.message().to_string()).unwrap();
+    let duration = hms_to_duration(args.message()).unwrap();
     let data = ctx.data.read().await;
     let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
 
@@ -286,7 +306,7 @@ fn ms_to_hms(ms: u64) -> String {
     format!("{}:{}:{}", hours_str, minutes_str, seconds_str)
 }
 
-fn hms_to_duration(hms: String) -> Result<Duration, ()> {
+fn hms_to_duration(hms: &str) -> Result<Duration, ()> {
     let v: Vec<u64> = hms
         .split(':')
         .map(|x| x.parse::<u64>().unwrap())
