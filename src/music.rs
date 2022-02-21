@@ -11,11 +11,11 @@ use serenity::{
         },
 };
 
-
+// TODO shuffle, clear
 
 #[group]
 #[only_in(guilds)]
-#[commands(join, leave, play, now_playing, skip, seek, qu)]
+#[commands(join, leave, play, now_playing, skip, seek, qu, pause, resume)]
 struct Music;
 
 #[command]
@@ -72,7 +72,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
                     .await,
             );
         }
-
+        // Does not clear the queue
         {
             let data = ctx.data.read().await;
             let lava_client = data.get::<crate::handlers::Lavalink>().unwrap().clone();
@@ -107,6 +107,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         }
     };
     let manager = songbird::get(ctx).await.unwrap().clone();
+    // this is just a copy of the join() function because idk how to just call the function
     if let None = manager.get(guild_id) {
         let guild = msg.guild(&ctx.cache).await.unwrap();
         let guild_id = guild.id;
@@ -141,6 +142,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                 )
         }
     }
+    // this is the one that actually plays the music
     if let Some(_handler) = manager.get(guild_id) {
         let query_info = lava_client.auto_search_tracks(&query).await?;
         if query_info.tracks.is_empty() {
@@ -162,7 +164,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             msg.channel_id
             .say(
                 &ctx.http,
-                format!("added: `{}`",query_info.tracks[0].info.as_ref().unwrap().title),
+                format!("queued: `{}`",query_info.tracks[0].info.as_ref().unwrap().title),
             ).await
         );
     } else {
@@ -287,6 +289,59 @@ async fn qu(ctx: &Context, msg: &Message) -> CommandResult {
     }
     Ok(())
 }
+
+#[command]
+async fn pause(ctx: &Context, msg: &Message) -> CommandResult {
+    let lava_client = ctx.data.read().await.get::<crate::handlers::Lavalink>().unwrap().clone();
+    match lava_client.pause(msg.guild_id.unwrap()).await {
+        Ok(_) => check_msg(
+            msg.channel_id
+            .say(
+                &ctx.http,
+                "paused"
+            ).await
+        ),
+
+        Err(_e) => {
+            check_msg(
+                msg.channel_id
+                .say(
+                    &ctx.http,
+                    "i hate you").await
+            );
+            return Ok(())
+        }
+    }
+    Ok(())
+}
+
+#[command]
+async fn resume(ctx: &Context, msg: &Message) -> CommandResult {
+    let lava_client = ctx.data.read().await.get::<crate::handlers::Lavalink>().unwrap().clone();
+    match lava_client.resume(msg.guild_id.unwrap()).await {
+        Ok(_) => {
+            check_msg(
+                msg.channel_id
+                .say(
+                    &ctx.http,
+                    "resumed"
+                ).await
+            );
+        }
+        Err(_) => {
+            check_msg(
+                msg.channel_id
+                .say(
+                    &ctx.http,
+                    "i hate you"
+                ).await
+            );
+            return Ok(())
+        }
+    }
+    Ok(())
+}
+
 
 fn check_msg(result: SerenityResult<Message>) {
     if let Err(why) = result {
