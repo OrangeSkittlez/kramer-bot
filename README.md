@@ -1,6 +1,8 @@
 # kramer-bot
 A personal (mostly music) bot that I use for a small discord made in Rust 🦀
+
 <sup>Trust me, this one isn't racist. I just like Seinfeld.</sup>
+
 This requires an UNIX-like system to run because I don't feel like testing it on Windows
 ## Installation
 
