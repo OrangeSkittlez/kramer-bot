@@ -1,5 +1,5 @@
 # kramer-bot
-A personal (mostly music) bot that I use for a small discord made in Rust 🦀
+A personal (mostly music) bot that I use for a small Discord; made in Rust 🦀
 
 <sup>Trust me, this one isn't racist. I just like Seinfeld.</sup>
 
