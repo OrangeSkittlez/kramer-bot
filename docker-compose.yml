@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  lavalink:
+    image: fredboat/lavalink:master-
+    volumes: 
+      - ./:/opt/Lavalink
+    ports:
+      - 2333:2333
+    network_mode: host
+  kramer_bot:
+    build: .
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - PREFIX=${PREFIX}
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD}
+    restart:
+      on-failure
+    depends_on:
+      - lavalink
+    links:
+      - "lavalink"
+    network_mode: host
+
